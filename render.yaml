@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: anime-bot
+    env: python
+    region: oregon        # closest free-tier region; change if needed
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: BOT_TOKEN
+        sync: false       # set manually in Render dashboard
+      - key: BOT_USERNAME
+        sync: false
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: DB_NAME
+        value: animebot
+      - key: WEBHOOK_URL
+        sync: false       # set to your Render service URL after first deploy
+      - key: PORT
+        value: "10000"    # Render assigns 10000 by default for free tier

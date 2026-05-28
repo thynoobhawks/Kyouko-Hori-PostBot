@@ -1,45 +1,80 @@
 """
-bot/handlers/start.py — /start command handler.
+main.py — Entry point for the Anime Auto Post Bot.
+Uses Pyrogram in polling mode started as a background task,
+with FastAPI only for the health endpoint and keeping Render alive.
+
+NOTE: Pyrogram does not support true webhook update injection.
+We run Pyrogram's built-in polling (idle) alongside FastAPI using asyncio.
+This is the correct lightweight pattern for Render free tier.
 """
 
+import asyncio
 import logging
-from pyrogram import Client, filters, enums
-from pyrogram.types import Message
-from pyrogram.handlers import MessageHandler
 
-from bot.database.crud import get_post_by_deep_link
-from bot.services.post_builder import send_quality_selection
+import uvicorn
+from fastapi import FastAPI, Response
+from contextlib import asynccontextmanager
 
+from config import config
+from bot.core import create_app, bot
+from bot.database.mongo import db
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 log = logging.getLogger(__name__)
 
 
-def register(client: Client) -> None:
-    client.add_handler(MessageHandler(
-        _start_handler,
-        filters.command("start") & filters.private,
-    ))
+async def delete_webhook():
+    """Remove any existing webhook so polling works cleanly."""
+    import aiohttp
+    url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/deleteWebhook"
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json={"drop_pending_updates": True}) as resp:
+            data = await resp.json()
+            if data.get("ok"):
+                log.info("✅ Webhook deleted — polling mode active.")
+            else:
+                log.warning(f"deleteWebhook response: {data}")
 
 
-async def _start_handler(client: Client, message: Message) -> None:
-    args = message.command[1:]
-    if args:
-        await _handle_deep_link(client, message, args[0].strip())
-    else:
-        await _send_welcome(message)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info("🚀 Starting bot…")
+    await db.connect()
+    create_app(bot)
+    await delete_webhook()
+    await bot.start()
+    # Run Pyrogram polling in background
+    asyncio.create_task(_run_polling())
+    yield
+    log.info("🛑 Shutting down…")
+    await bot.stop()
+    await db.close()
 
 
-async def _handle_deep_link(client: Client, message: Message, deep_link_id: str) -> None:
-    post = await get_post_by_deep_link(deep_link_id)
-    if not post:
-        await message.reply("⚠️ This link is invalid or the post was removed.", quote=True)
-        return
-    await send_quality_selection(client, message.chat.id, post)
+async def _run_polling():
+    """Keep Pyrogram running — it handles incoming updates via long polling."""
+    from pyrogram import idle
+    log.info("🔄 Pyrogram polling started.")
+    await idle()
 
 
-async def _send_welcome(message: Message) -> None:
-    text = (
-        "<b>🎌 Anime Bot</b>\n\n"
-        "I post anime episodes to the channel and provide quality download links.\n\n"
-        "<i>Click a download button in the channel to get started.</i>"
-    )
-    await message.reply(text, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+app = FastAPI(lifespan=lifespan, title="Anime Bot", docs_url=None, redoc_url=None)
+
+
+@app.get("/health")
+async def health():
+    """Keep-alive endpoint for UptimeRobot pings."""
+    return {"status": "ok", "bot": config.BOT_USERNAME}
+
+
+@app.get("/")
+async def root():
+    return {"status": "running"}
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=config.PORT, log_level="info")

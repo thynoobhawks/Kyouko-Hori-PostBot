@@ -1,5 +1,6 @@
 """
 bot/services/post_builder.py — Builds and publishes formatted anime posts.
+Sends cover image as actual photo with caption for channel posts.
 """
 
 import logging
@@ -43,7 +44,7 @@ async def build_and_post(client: Client, session: dict) -> str | None:
     bot_link = f"https://t.me/{config.BOT_USERNAME}?start={deep_link_id}"
 
     template = await get_template("channel_post")
-    text = template.format(
+    caption = template.format(
         title=escape_html(anime["title_romaji"]),
         english_title=escape_html(anime["title_english"]),
         episode=escape_html(str(episode)),
@@ -70,15 +71,24 @@ async def build_and_post(client: Client, session: dict) -> str | None:
         return None
 
     try:
-        # Send as text with link preview (cover_image embedded in template as hidden link)
-        # This gives the rich preview card effect
-        await client.send_message(
-            chat_id=channel_id,
-            text=text,
-            parse_mode=enums.ParseMode.HTML,
-            reply_markup=markup,
-            disable_web_page_preview=False,  # MUST be False for preview to show
-        )
+        if cover_image:
+            # Send actual photo with caption
+            await client.send_photo(
+                chat_id=channel_id,
+                photo=cover_image,
+                caption=caption,
+                parse_mode=enums.ParseMode.HTML,
+                reply_markup=markup,
+            )
+        else:
+            # Fallback to text if no cover
+            await client.send_message(
+                chat_id=channel_id,
+                text=caption,
+                parse_mode=enums.ParseMode.HTML,
+                reply_markup=markup,
+                disable_web_page_preview=True,
+            )
         log.info(f"Posted '{anime['title_romaji']}' ep {episode} → channel {channel_id}")
     except Exception as e:
         log.error(f"Failed to send channel post: {e}")
@@ -118,13 +128,21 @@ async def send_quality_selection(client: Client, chat_id: int, post: dict) -> No
     markup = InlineKeyboardMarkup(buttons) if buttons else None
 
     try:
-        await client.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode=enums.ParseMode.HTML,
-            reply_markup=markup,
-            disable_web_page_preview=False,  # show cover preview
-        )
+        if cover_image:
+            await client.send_photo(
+                chat_id=chat_id,
+                photo=cover_image,
+                caption=text,
+                parse_mode=enums.ParseMode.HTML,
+                reply_markup=markup,
+            )
+        else:
+            await client.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode=enums.ParseMode.HTML,
+                reply_markup=markup,
+                disable_web_page_preview=True,
+            )
     except Exception as e:
         log.error(f"Failed to send quality selection to {chat_id}: {e}")
-

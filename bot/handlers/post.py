@@ -49,21 +49,24 @@ async def _post_command(client: Client, message: Message) -> None:
         )
         return
 
-    search_query = " ".join(args)
+    raw_query = " ".join(args)
     uid = message.from_user.id
     fsm.clear(uid)
 
     status_msg = await message.reply("🔍 Fetching anime info from AniList…", quote=True)
 
-    anime = await fetch_anime(search_query)
+    anime = await fetch_anime(raw_query)
     if not anime:
         await status_msg.edit_text(
-            f"❌ Could not find: <b>{escape_html(search_query)}</b>",
+            f"❌ Could not find: <b>{escape_html(raw_query)}</b>\n\n"
+            "Tips:\n• Use the exact anime title\n• Try English or Romaji title\n• Remove episode number",
             parse_mode=enums.ParseMode.HTML,
         )
         return
 
-    episode_hint = _extract_episode(args)
+    # Use episode hint extracted by anilist.py
+    episode_hint = anime.pop("_episode_hint", args[-1])
+
     fsm.set_state(uid, fsm.AWAIT_480P, {
         "anime_info": anime,
         "episode": episode_hint,
@@ -172,15 +175,6 @@ async def _send_preview(client: Client, message: Message, uid: int) -> None:
     ]])
 
     await message.reply(preview, parse_mode=enums.ParseMode.HTML, reply_markup=markup, quote=True)
-
-
-def _extract_episode(args: list[str]) -> str:
-    for token in reversed(args):
-        if token.isdigit():
-            return token
-        if token.lower().startswith("episode"):
-            return token
-    return " ".join(args[-2:]) if len(args) >= 2 else args[-1]
 
 
 def _anime_preview_text(anime: dict, episode: str) -> str:

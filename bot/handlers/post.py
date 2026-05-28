@@ -1,19 +1,9 @@
 """
-bot/handlers/post.py — /post command + multi-step quality link collection.
-
-Flow:
-  /post <anime name + episode>
-    → fetch AniList
-    → ask for 480p link  (skippable with /skip)
-    → ask for 720p link
-    → ask for 1080p link
-    → ask for 4K link
-    → preview
-    → confirm → publish to channel
+bot/handlers/post.py — /post FSM conversation flow.
 """
 
 import logging
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.handlers import MessageHandler
 
@@ -23,28 +13,14 @@ from bot.utils.admin import is_admin
 from bot.utils.html import escape_html, SEPARATOR
 from bot.utils import fsm
 from bot.database.crud import get_main_channel
-from config import config
 
 log = logging.getLogger(__name__)
 
 
 def register(client: Client) -> None:
-    # /post command
-    client.add_handler(MessageHandler(
-        _post_command,
-        filters.command("post") & filters.private,
-    ))
-    # /cancel
-    client.add_handler(MessageHandler(
-        _cancel_command,
-        filters.command("cancel") & filters.private,
-    ))
-    # /skip
-    client.add_handler(MessageHandler(
-        _skip_command,
-        filters.command("skip") & filters.private,
-    ))
-    # Text messages during a post session
+    client.add_handler(MessageHandler(_post_command, filters.command("post") & filters.private))
+    client.add_handler(MessageHandler(_cancel_command, filters.command("cancel") & filters.private))
+    client.add_handler(MessageHandler(_skip_command, filters.command("skip") & filters.private))
     client.add_handler(MessageHandler(
         _text_router,
         filters.text & filters.private & ~filters.command([
@@ -54,18 +30,13 @@ def register(client: Client) -> None:
     ))
 
 
-# ── /post ─────────────────────────────────────────────────────────────────────
-
 async def _post_command(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
         return
 
     channel = await get_main_channel()
     if not channel:
-        await message.reply(
-            "⚠️ No main channel set. Use /setmainchannel first.",
-            quote=True,
-        )
+        await message.reply("⚠️ No main channel set. Use /setmainchannel first.", quote=True)
         return
 
     args = message.command[1:]
@@ -73,7 +44,7 @@ async def _post_command(client: Client, message: Message) -> None:
         await message.reply(
             "Usage: <code>/post Anime Name Episode Number</code>\n"
             "Example: <code>/post Dandadan Episode 08</code>",
-            parse_mode="html",
+            parse_mode=enums.ParseMode.HTML,
             quote=True,
         )
         return
@@ -87,14 +58,12 @@ async def _post_command(client: Client, message: Message) -> None:
     anime = await fetch_anime(search_query)
     if not anime:
         await status_msg.edit_text(
-            f"❌ Could not find anime for: <b>{escape_html(search_query)}</b>\n"
-            "Try a more precise title.",
-            parse_mode="html",
+            f"❌ Could not find: <b>{escape_html(search_query)}</b>",
+            parse_mode=enums.ParseMode.HTML,
         )
         return
 
     episode_hint = _extract_episode(args)
-
     fsm.set_state(uid, fsm.AWAIT_480P, {
         "anime_info": anime,
         "episode": episode_hint,
@@ -103,18 +72,14 @@ async def _post_command(client: Client, message: Message) -> None:
 
     await status_msg.edit_text(
         _anime_preview_text(anime, episode_hint),
-        parse_mode="html",
+        parse_mode=enums.ParseMode.HTML,
         disable_web_page_preview=True,
     )
-
     await message.reply(
-        "📎 Send the <b>480p</b> download link.\n"
-        "Or /skip to skip this quality. /cancel to abort.",
-        parse_mode="html",
+        "📎 Send the <b>480p</b> download link.\nOr /skip to skip. /cancel to abort.",
+        parse_mode=enums.ParseMode.HTML,
     )
 
-
-# ── Text router (FSM steps) ────────────────────────────────────────────────────
 
 async def _text_router(client: Client, message: Message) -> None:
     uid = message.from_user.id
@@ -126,18 +91,13 @@ async def _text_router(client: Client, message: Message) -> None:
         return
 
     link = message.text.strip()
-
     if not (link.startswith("http://") or link.startswith("https://") or link.startswith("tg://")):
-        await message.reply(
-            "⚠️ That doesn't look like a valid URL. Send a link or /skip.",
-            quote=True,
-        )
+        await message.reply("⚠️ That doesn't look like a valid URL. Send a link or /skip.", quote=True)
         return
 
     label = fsm.quality_label_for_state(state)
     data = fsm.get_data(uid)
     data["qualities"][label] = link
-
     next_state = fsm.NEXT_QUALITY_STATE[state]
 
     if next_state == fsm.AWAIT_CONFIRM:
@@ -147,14 +107,11 @@ async def _text_router(client: Client, message: Message) -> None:
         fsm.set_state(uid, next_state, data)
         next_label = fsm.quality_label_for_state(next_state)
         await message.reply(
-            f"✅ Saved {label}.\n\n"
-            f"📎 Send the <b>{next_label.upper()}</b> link, /skip, or /cancel.",
-            parse_mode="html",
+            f"✅ Saved {label}.\n\n📎 Send the <b>{next_label.upper()}</b> link, /skip, or /cancel.",
+            parse_mode=enums.ParseMode.HTML,
             quote=True,
         )
 
-
-# ── /skip ─────────────────────────────────────────────────────────────────────
 
 async def _skip_command(client: Client, message: Message) -> None:
     uid = message.from_user.id
@@ -177,14 +134,11 @@ async def _skip_command(client: Client, message: Message) -> None:
         fsm.set_state(uid, next_state)
         next_label = fsm.quality_label_for_state(next_state)
         await message.reply(
-            f"⏭ Skipped {label}.\n\n"
-            f"📎 Send the <b>{next_label.upper()}</b> link, /skip, or /cancel.",
-            parse_mode="html",
+            f"⏭ Skipped {label}.\n\n📎 Send the <b>{next_label.upper()}</b> link, /skip, or /cancel.",
+            parse_mode=enums.ParseMode.HTML,
             quote=True,
         )
 
-
-# ── /cancel ───────────────────────────────────────────────────────────────────
 
 async def _cancel_command(client: Client, message: Message) -> None:
     uid = message.from_user.id
@@ -193,8 +147,6 @@ async def _cancel_command(client: Client, message: Message) -> None:
     fsm.clear(uid)
     await message.reply("🚫 Post creation cancelled.", quote=True)
 
-
-# ── Preview + Confirm ─────────────────────────────────────────────────────────
 
 async def _send_preview(client: Client, message: Message, uid: int) -> None:
     data = fsm.get_data(uid)
@@ -211,21 +163,16 @@ async def _send_preview(client: Client, message: Message, uid: int) -> None:
         f"<b>Episode:</b> {escape_html(str(episode))}\n"
         f"<b>Season:</b> {escape_html(str(anime['season']))}\n\n"
         f"<b>Qualities:</b>\n{escape_html(quality_text)}\n\n"
-        f"{SEPARATOR}\n"
-        f"<i>Confirm to post to channel?</i>"
+        f"{SEPARATOR}\n<i>Confirm to post to channel?</i>"
     )
 
-    markup = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ Post Now", callback_data=f"confirm_post:{uid}"),
-            InlineKeyboardButton("❌ Cancel",   callback_data=f"cancel_post:{uid}"),
-        ]
-    ])
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Post Now", callback_data=f"confirm_post:{uid}"),
+        InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_post:{uid}"),
+    ]])
 
-    await message.reply(preview, parse_mode="html", reply_markup=markup, quote=True)
+    await message.reply(preview, parse_mode=enums.ParseMode.HTML, reply_markup=markup, quote=True)
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _extract_episode(args: list[str]) -> str:
     for token in reversed(args):

@@ -3,7 +3,7 @@ bot/handlers/callbacks.py — Inline keyboard callback query handler.
 """
 
 import logging
-from pyrogram import Client
+from pyrogram import Client, enums
 from pyrogram.types import CallbackQuery
 from pyrogram.handlers import CallbackQueryHandler
 
@@ -56,11 +56,9 @@ async def _post_callback(client: Client, query: CallbackQuery) -> None:
         bot_link = f"https://t.me/{config.BOT_USERNAME}?start={deep_link_id}"
         await query.message.edit_text(
             f"✅ <b>Posted!</b>\n\nDeep link: <code>{bot_link}</code>",
-            parse_mode="html",
+            parse_mode=enums.ParseMode.HTML,
         )
     else:
-        await query.message.edit_text(
-            "❌ Failed to post. Check bot channel permissions and logs."
-        )
+        await query.message.edit_text("❌ Failed to post. Check bot channel permissions and logs.")
 
     await query.answer()

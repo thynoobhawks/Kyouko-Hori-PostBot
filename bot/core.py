@@ -29,12 +29,11 @@ bot: Client = _build_client()
 def create_app(client: Client) -> None:
     """Register every handler module onto the client."""
     # Import here to avoid circular imports at module-load time
-    from bot.handlers import start, post, settings, callbacks, errors
+    from bot.handlers import start, post, settings, callbacks
 
     start.register(client)
     post.register(client)
     settings.register(client)
     callbacks.register(client)
-    errors.register(client)
 
     log.info("✅ All handlers registered.")

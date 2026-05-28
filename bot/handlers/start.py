@@ -3,7 +3,7 @@ bot/handlers/start.py — /start command handler.
 """
 
 import logging
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import Message
 from pyrogram.handlers import MessageHandler
 
@@ -22,7 +22,6 @@ def register(client: Client) -> None:
 
 async def _start_handler(client: Client, message: Message) -> None:
     args = message.command[1:]
-
     if args:
         await _handle_deep_link(client, message, args[0].strip())
     else:
@@ -43,4 +42,4 @@ async def _send_welcome(message: Message) -> None:
         "I post anime episodes to the channel and provide quality download links.\n\n"
         "<i>Click a download button in the channel to get started.</i>"
     )
-    await message.reply(text, parse_mode="html", disable_web_page_preview=True)
+    await message.reply(text, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)

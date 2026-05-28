@@ -1,42 +1,33 @@
 """
 bot/handlers/settings.py — Admin settings commands.
-
-Commands:
-  /setmainchannel  — set the channel to post to
-  /settemplate     — update a post template
-  /gettemplate     — view current template
-  /settings        — show current settings summary
 """
 
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from pyrogram.handlers import MessageHandler
 
-from bot.database.crud import (
-    set_main_channel,
-    get_main_channel,
-    get_template,
-    set_template,
-)
+from bot.database.crud import set_main_channel, get_main_channel, get_template, set_template
 from bot.utils.admin import is_admin
-from bot.utils.html import escape_html, code
+from bot.utils.html import escape_html
 from bot.utils import fsm
 
 log = logging.getLogger(__name__)
 
 
 def register(client: Client) -> None:
-    client.add_handler(filters.command("setmainchannel") & filters.private, _set_channel)
-    client.add_handler(filters.command("settings") & filters.private, _show_settings)
-    client.add_handler(filters.command("settemplate") & filters.private, _set_template_cmd)
-    client.add_handler(filters.command("gettemplate") & filters.private, _get_template_cmd)
-
-    # Handle channel message forwarded for channel ID detection
-    client.add_handler(
-        filters.forwarded & filters.private,
-        _forwarded_channel_handler,
-        group=2,
-    )
+    client.add_handler(MessageHandler(_set_channel, filters.command("setmainchannel") & filters.private))
+    client.add_handler(MessageHandler(_show_settings, filters.command("settings") & filters.private))
+    client.add_handler(MessageHandler(_set_template_cmd, filters.command("settemplate") & filters.private))
+    client.add_handler(MessageHandler(_get_template_cmd, filters.command("gettemplate") & filters.private))
+    client.add_handler(MessageHandler(_forwarded_channel_handler, filters.forwarded & filters.private))
+    client.add_handler(MessageHandler(
+        _template_text_handler,
+        filters.text & filters.private & ~filters.command([
+            "start", "cancel", "skip", "setmainchannel",
+            "settemplate", "gettemplate", "settings", "post"
+        ]),
+    ))
 
 
 # ── /setmainchannel ───────────────────────────────────────────────────────────
@@ -46,12 +37,9 @@ async def _set_channel(client: Client, message: Message) -> None:
         return
 
     args = message.command[1:]
-
     if args:
-        # Admin passed channel ID directly: /setmainchannel -100123456
-        raw = args[0].strip()
         try:
-            channel_id = int(raw)
+            channel_id = int(args[0].strip())
         except ValueError:
             await message.reply(
                 "⚠️ Invalid channel ID. Use a numeric ID like <code>-1001234567890</code>\n"
@@ -61,7 +49,6 @@ async def _set_channel(client: Client, message: Message) -> None:
             return
         await _save_channel(message, channel_id)
     else:
-        # Ask them to forward a message
         fsm.set_state(message.from_user.id, fsm.AWAIT_CHANNEL)
         await message.reply(
             "📡 Forward any message from the target channel,\n"
@@ -77,7 +64,6 @@ async def _forwarded_channel_handler(client: Client, message: Message) -> None:
     if fsm.get_state(message.from_user.id) != fsm.AWAIT_CHANNEL:
         return
 
-    # Extract channel ID from forwarded message
     fwd = message.forward_from_chat
     if not fwd:
         await message.reply("⚠️ Could not detect channel from that message.", quote=True)
@@ -95,7 +81,7 @@ async def _save_channel(message: Message, channel_id: int) -> None:
     )
 
 
-# ── /settings ────────────────────────────────────────────────────────────────
+# ── /settings ─────────────────────────────────────────────────────────────────
 
 async def _show_settings(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -119,7 +105,7 @@ async def _show_settings(client: Client, message: Message) -> None:
     await message.reply(text, parse_mode="html")
 
 
-# ── /settemplate ─────────────────────────────────────────────────────────────
+# ── /settemplate ──────────────────────────────────────────────────────────────
 
 async def _set_template_cmd(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -146,25 +132,6 @@ async def _set_template_cmd(client: Client, message: Message) -> None:
     )
 
 
-# Intercept template text — handled via a dedicated message filter
-# We hook into the text router in post.py group=1 via the AWAIT_TEMPLATE state check below.
-# To keep concerns separate, register a separate handler here:
-
-def register(client: Client) -> None:  # noqa: F811 — intentional re-definition to add template msg handler
-    client.add_handler(filters.command("setmainchannel") & filters.private, _set_channel)
-    client.add_handler(filters.command("settings") & filters.private, _show_settings)
-    client.add_handler(filters.command("settemplate") & filters.private, _set_template_cmd)
-    client.add_handler(filters.command("gettemplate") & filters.private, _get_template_cmd)
-    client.add_handler(filters.forwarded & filters.private, _forwarded_channel_handler, group=2)
-    client.add_handler(
-        filters.text & filters.private & ~filters.command(["start","cancel","skip",
-                                                            "setmainchannel","settemplate",
-                                                            "gettemplate","settings","post"]),
-        _template_text_handler,
-        group=3,
-    )
-
-
 async def _template_text_handler(client: Client, message: Message) -> None:
     uid = message.from_user.id
     if not is_admin(uid):
@@ -179,7 +146,7 @@ async def _template_text_handler(client: Client, message: Message) -> None:
     await message.reply(f"✅ Template <b>{template_name}</b> saved.", parse_mode="html")
 
 
-# ── /gettemplate ─────────────────────────────────────────────────────────────
+# ── /gettemplate ──────────────────────────────────────────────────────────────
 
 async def _get_template_cmd(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -193,3 +160,4 @@ async def _get_template_cmd(client: Client, message: Message) -> None:
         f"<code>{escape_html(content)}</code>",
         parse_mode="html",
     )
+

@@ -12,10 +12,10 @@ Flow:
     → confirm → publish to channel
 """
 
-import asyncio
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.handlers import MessageHandler
 
 from bot.services.anilist import fetch_anime
 from bot.services.post_builder import build_and_post
@@ -27,37 +27,31 @@ from config import config
 
 log = logging.getLogger(__name__)
 
-# ── Timeout for waiting on admin replies (seconds) ────────────────────────────
-STEP_TIMEOUT = 120
-
 
 def register(client: Client) -> None:
     # /post command
-    client.add_handler(
-        filters.command("post") & filters.private,
+    client.add_handler(MessageHandler(
         _post_command,
-        group=0,
-    )
-    # /cancel at any point
-    client.add_handler(
-        filters.command("cancel") & filters.private,
+        filters.command("post") & filters.private,
+    ))
+    # /cancel
+    client.add_handler(MessageHandler(
         _cancel_command,
-        group=0,
-    )
-    # /skip — skip current quality
-    client.add_handler(
-        filters.command("skip") & filters.private,
+        filters.command("cancel") & filters.private,
+    ))
+    # /skip
+    client.add_handler(MessageHandler(
         _skip_command,
-        group=0,
-    )
+        filters.command("skip") & filters.private,
+    ))
     # Text messages during a post session
-    client.add_handler(
-        filters.text & filters.private & ~filters.command(["start", "cancel", "skip",
-                                                            "setmainchannel", "settemplate",
-                                                            "post"]),
+    client.add_handler(MessageHandler(
         _text_router,
-        group=1,
-    )
+        filters.text & filters.private & ~filters.command([
+            "start", "cancel", "skip", "setmainchannel",
+            "settemplate", "gettemplate", "settings", "post"
+        ]),
+    ))
 
 
 # ── /post ─────────────────────────────────────────────────────────────────────
@@ -66,7 +60,6 @@ async def _post_command(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
         return
 
-    # Check channel configured
     channel = await get_main_channel()
     if not channel:
         await message.reply(
@@ -87,8 +80,6 @@ async def _post_command(client: Client, message: Message) -> None:
 
     search_query = " ".join(args)
     uid = message.from_user.id
-
-    # Reset any existing session
     fsm.clear(uid)
 
     status_msg = await message.reply("🔍 Fetching anime info from AniList…", quote=True)
@@ -102,17 +93,14 @@ async def _post_command(client: Client, message: Message) -> None:
         )
         return
 
-    # Extract episode hint from query (last token if it looks like a number)
     episode_hint = _extract_episode(args)
 
-    # Store in FSM
     fsm.set_state(uid, fsm.AWAIT_480P, {
         "anime_info": anime,
         "episode": episode_hint,
         "qualities": {},
     })
 
-    # Show what we found
     await status_msg.edit_text(
         _anime_preview_text(anime, episode_hint),
         parse_mode="html",
@@ -135,11 +123,10 @@ async def _text_router(client: Client, message: Message) -> None:
 
     state = fsm.get_state(uid)
     if state not in fsm.QUALITY_STATES:
-        return  # not in a post session — ignore
+        return
 
     link = message.text.strip()
 
-    # Basic URL validation
     if not (link.startswith("http://") or link.startswith("https://") or link.startswith("tg://")):
         await message.reply(
             "⚠️ That doesn't look like a valid URL. Send a link or /skip.",
@@ -154,7 +141,6 @@ async def _text_router(client: Client, message: Message) -> None:
     next_state = fsm.NEXT_QUALITY_STATE[state]
 
     if next_state == fsm.AWAIT_CONFIRM:
-        # All qualities collected — go to preview/confirm
         fsm.set_state(uid, fsm.AWAIT_CONFIRM, data)
         await _send_preview(client, message, uid)
     else:
@@ -208,7 +194,7 @@ async def _cancel_command(client: Client, message: Message) -> None:
     await message.reply("🚫 Post creation cancelled.", quote=True)
 
 
-# ── Preview + Confirm via callback ────────────────────────────────────────────
+# ── Preview + Confirm ─────────────────────────────────────────────────────────
 
 async def _send_preview(client: Client, message: Message, uid: int) -> None:
     data = fsm.get_data(uid)
@@ -216,7 +202,7 @@ async def _send_preview(client: Client, message: Message, uid: int) -> None:
     qualities = data.get("qualities", {})
     episode = data.get("episode", "?")
 
-    quality_text = "\n".join(f"  • {k}" for k, v in qualities.items()) if qualities else "  • (none)"
+    quality_text = "\n".join(f"  • {k}" for k in qualities.keys()) if qualities else "  • (none)"
 
     preview = (
         f"<b>📋 Preview</b>\n{SEPARATOR}\n\n"
@@ -242,11 +228,6 @@ async def _send_preview(client: Client, message: Message, uid: int) -> None:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _extract_episode(args: list[str]) -> str:
-    """
-    Try to pull an episode number from the command args.
-    e.g. ["Dandadan", "Episode", "08"] → "08"
-         ["Attack", "on", "Titan", "S4E12"] → "S4E12"
-    """
     for token in reversed(args):
         if token.isdigit():
             return token
@@ -267,3 +248,4 @@ def _anime_preview_text(anime: dict, episode: str) -> str:
         f"<b>Genres:</b> {escape_html(genres)}\n\n"
         f"<i>{escape_html(anime['synopsis'])}</i>"
     )
+

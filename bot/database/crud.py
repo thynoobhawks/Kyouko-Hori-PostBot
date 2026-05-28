@@ -1,6 +1,5 @@
 """
 bot/database/crud.py — All database read/write operations.
-Keeps handlers clean by abstracting every DB call here.
 """
 
 from datetime import datetime, timezone
@@ -9,8 +8,6 @@ import nanoid
 
 from bot.database.mongo import db
 
-
-# ── Settings ──────────────────────────────────────────────────────────────────
 
 async def get_setting(key: str) -> Optional[str]:
     doc = await db.settings.find_one({"key": key})
@@ -25,8 +22,6 @@ async def set_setting(key: str, value) -> None:
     )
 
 
-# ── Main channel ──────────────────────────────────────────────────────────────
-
 async def get_main_channel() -> Optional[int]:
     val = await get_setting("main_channel_id")
     return int(val) if val else None
@@ -36,19 +31,9 @@ async def set_main_channel(channel_id: int) -> None:
     await set_setting("main_channel_id", str(channel_id))
 
 
-# ── Anime posts ───────────────────────────────────────────────────────────────
-
 async def create_anime_post(data: dict) -> str:
-    """
-    Insert a new anime post document.
-    Returns the generated deep_link_id (short unique string).
-    """
     deep_link_id = nanoid.generate(size=10)
-    doc = {
-        **data,
-        "deep_link_id": deep_link_id,
-        "created_at": _now(),
-    }
+    doc = {**data, "deep_link_id": deep_link_id, "created_at": _now()}
     await db.anime_posts.insert_one(doc)
     return deep_link_id
 
@@ -57,34 +42,35 @@ async def get_post_by_deep_link(deep_link_id: str) -> Optional[dict]:
     return await db.anime_posts.find_one({"deep_link_id": deep_link_id})
 
 
-async def get_post_by_id(post_id: str) -> Optional[dict]:
-    from bson import ObjectId
-    return await db.anime_posts.find_one({"_id": ObjectId(post_id)})
-
-
 # ── Templates ─────────────────────────────────────────────────────────────────
 
+# New variables added: {genres} {year} {rating} {total_episodes} {studio} {anilist_url}
+# The \u200b (zero-width space) hyperlinked to the cover image triggers Telegram link preview
+
 DEFAULT_CHANNEL_TEMPLATE = (
-    "<b>{title} • S{season}</b>\n"
+    '<a href="{cover_image}">&#8205;</a>'
+    "<b>{title} • EP{episode}</b>\n"
     "<i>{english_title}</i>\n\n"
-    "─────────────────────\n\n"
+    "─────────────────────\n"
     "<blockquote expandable>"
-    "<b>EPISODE</b>\n• {episode}\n\n"
-    "<b>AUDIO</b>\n• JAPANESE\n\n"
+    "<b>EPISODE</b> • {episode}\n"
+    "<b>AUDIO</b> • JAPANESE\n"
+    "<b>SUBTITLES</b> • ENGLISH SUBS\n\n"
+    "<b>YEAR</b> • {year}\n"
+    "<b>GENRES</b> • {genres}\n"
+    "<b>RATING</b> • {rating}/100\n\n"
     "─────────────────────\n\n"
-    "<b>AVAILABLE QUALITIES</b>\n• {qualities}\n\n"
-    "─────────────────────\n\n"
-    "<b>SUBTITLES</b>\n• ENGLISH SUBS\n"
-    "</blockquote>"
-    '<a href="{download_link}">ᴅᴏᴡɴʟᴏᴀᴅ ᴇᴘɪꜱᴏᴅᴇ</a>'
+    "<b>AVAILABLE QUALITIES</b>\n"
+    "{qualities}\n"
+    "</blockquote>\n"
+    "<a href=\"{download_link}\">ᴅᴏᴡɴʟᴏᴀᴅ ᴇᴘɪꜱᴏᴅᴇ</a>"
 )
 
 DEFAULT_BOT_TEMPLATE = (
-    "<b>{title}</b>\n\n"
-    "<blockquote>\n"
-    "• EPISODE : {episode}\n"
-    "• AVAILABLE : {qualities}\n"
-    "</blockquote>\n"
+    '<a href="{cover_image}">&#8205;</a>'
+    "<b>{title}</b>\n"
+    "<b>Episode {episode}</b>\n\n"
+    "<b>Available:</b> {qualities}\n\n"
     "<i>Select preferred quality below.</i>"
 )
 
@@ -107,8 +93,6 @@ async def set_template(name: str, content: str) -> None:
         upsert=True,
     )
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _now():
     return datetime.now(timezone.utc)

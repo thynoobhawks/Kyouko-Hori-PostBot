@@ -1,15 +1,15 @@
 """
 bot/services/anilist.py — AniList GraphQL API integration.
-Fetches anime metadata: title, cover, synopsis, genres, rating, etc.
+Searches by clean anime title only (episode number stripped before querying).
 """
 
 import logging
+import re
 import aiohttp
 from config import config
 
 log = logging.getLogger(__name__)
 
-# ── GraphQL Query ─────────────────────────────────────────────────────────────
 QUERY = """
 query ($search: String) {
   Media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
@@ -35,21 +35,51 @@ query ($search: String) {
     studios(isMain: true) {
       nodes { name }
     }
-    nextAiringEpisode {
-      episode
-      airingAt
-    }
   }
 }
 """
 
 
-async def fetch_anime(search_query: str) -> dict | None:
+def clean_search_query(raw: str) -> tuple[str, str]:
     """
-    Search AniList for an anime by name.
+    Split user input into (anime_title, episode_hint).
+
+    Examples:
+      "Naruto 01"               → ("Naruto", "01")
+      "Dandadan Episode 08"     → ("Dandadan", "Episode 08")
+      "Witch Hat Atelier 01"    → ("Witch Hat Atelier", "01")
+      "Attack on Titan S4E12"   → ("Attack on Titan", "S4E12")
+    """
+    # Match episode patterns at the END of the string
+    ep_patterns = [
+        r'\s+[Ee]pisode\s+(\d+)$',       # "Episode 08"
+        r'\s+[Ee]p\.?\s*(\d+)$',          # "Ep 08" or "Ep. 08"
+        r'\s+S\d+[Ee]\d+$',               # "S4E12"
+        r'\s+(\d{1,4})$',                  # trailing number "01"
+    ]
+
+    episode_hint = ""
+    title = raw.strip()
+
+    for pattern in ep_patterns:
+        match = re.search(pattern, title, re.IGNORECASE)
+        if match:
+            episode_hint = title[match.start():].strip()
+            title = title[:match.start()].strip()
+            break
+
+    return title, episode_hint or raw.split()[-1]
+
+
+async def fetch_anime(raw_query: str) -> dict | None:
+    """
+    Search AniList for an anime. Strips episode info before querying.
     Returns a normalised dict or None on failure.
     """
-    payload = {"query": QUERY, "variables": {"search": search_query}}
+    search_title, episode_hint = clean_search_query(raw_query)
+    log.info(f"AniList search: '{search_title}' (episode hint: '{episode_hint}')")
+
+    payload = {"query": QUERY, "variables": {"search": search_title}}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -57,14 +87,12 @@ async def fetch_anime(search_query: str) -> dict | None:
                 config.ANILIST_API,
                 json=payload,
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
-                timeout=aiohttp.ClientTimeout(total=10),
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
                 if resp.status != 200:
                     log.error(f"AniList returned HTTP {resp.status}")
                     return None
-
                 data = await resp.json()
-
     except Exception as e:
         log.error(f"AniList request failed: {e}")
         return None
@@ -72,14 +100,16 @@ async def fetch_anime(search_query: str) -> dict | None:
     try:
         media = data["data"]["Media"]
     except (KeyError, TypeError):
-        log.warning(f"No AniList result for: {search_query!r}")
+        log.warning(f"No AniList result for: {search_title!r}")
         return None
 
-    return _normalise(media)
+    result = _normalise(media)
+    # Attach the episode hint so handlers can use it
+    result["_episode_hint"] = episode_hint
+    return result
 
 
 def _normalise(media: dict) -> dict:
-    """Flatten the AniList response into a clean, flat dict."""
     title = media.get("title", {})
     cover = media.get("coverImage", {})
     studios = media.get("studios", {}).get("nodes", [])
@@ -104,8 +134,6 @@ def _normalise(media: dict) -> dict:
 
 
 def _clean_synopsis(text: str) -> str:
-    """Strip HTML tags from AniList synopsis."""
-    import re
     clean = re.sub(r"<[^>]+>", "", text or "")
-    # Truncate to keep messages short
     return clean[:350].rstrip() + ("…" if len(clean) > 350 else "")
+

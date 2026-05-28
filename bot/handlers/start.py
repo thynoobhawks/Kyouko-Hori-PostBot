@@ -1,13 +1,11 @@
 """
 bot/handlers/start.py — /start command handler.
-
-• Plain /start → welcome message
-• /start <deep_link_id> → fetch post from DB and show quality buttons
 """
 
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from pyrogram.handlers import MessageHandler
 
 from bot.database.crud import get_post_by_deep_link
 from bot.services.post_builder import send_quality_selection
@@ -16,19 +14,17 @@ log = logging.getLogger(__name__)
 
 
 def register(client: Client) -> None:
-    client.add_handler(
-        # Match /start with or without a payload
-        filters.command("start") & filters.private,
+    client.add_handler(MessageHandler(
         _start_handler,
-    )
+        filters.command("start") & filters.private,
+    ))
 
 
 async def _start_handler(client: Client, message: Message) -> None:
-    args = message.command[1:]  # everything after /start
+    args = message.command[1:]
 
     if args:
-        deep_link_id = args[0].strip()
-        await _handle_deep_link(client, message, deep_link_id)
+        await _handle_deep_link(client, message, args[0].strip())
     else:
         await _send_welcome(message)
 
@@ -36,12 +32,8 @@ async def _start_handler(client: Client, message: Message) -> None:
 async def _handle_deep_link(client: Client, message: Message, deep_link_id: str) -> None:
     post = await get_post_by_deep_link(deep_link_id)
     if not post:
-        await message.reply(
-            "⚠️ This link is invalid or the post was removed.",
-            quote=True,
-        )
+        await message.reply("⚠️ This link is invalid or the post was removed.", quote=True)
         return
-
     await send_quality_selection(client, message.chat.id, post)
 
 

@@ -3,7 +3,7 @@ bot/handlers/callbacks.py — Inline keyboard callback query handler.
 """
 
 import logging
-from pyrogram import Client, enums
+from pyrogram import Client, enums, filters
 from pyrogram.types import CallbackQuery
 from pyrogram.handlers import CallbackQueryHandler
 
@@ -16,9 +16,10 @@ log = logging.getLogger(__name__)
 
 
 def register(client: Client) -> None:
+    # Use filters.regex instead of lambda for reliable callback matching
     client.add_handler(CallbackQueryHandler(
         _post_callback,
-        lambda _, __, query: query.data.startswith(("confirm_post:", "cancel_post:")),
+        filters.regex(r"^(confirm_post|cancel_post):\d+$"),
     ))
 
 
@@ -41,6 +42,7 @@ async def _post_callback(client: Client, query: CallbackQuery) -> None:
         await query.answer("Cancelled.")
         return
 
+    # ── confirm_post ──────────────────────────────────────────────────────────
     state = fsm.get_state(uid)
     if state != fsm.AWAIT_CONFIRM:
         await query.answer("⚠️ Session expired. Start over with /post.", show_alert=True)
@@ -59,6 +61,8 @@ async def _post_callback(client: Client, query: CallbackQuery) -> None:
             parse_mode=enums.ParseMode.HTML,
         )
     else:
-        await query.message.edit_text("❌ Failed to post. Check bot channel permissions and logs.")
+        await query.message.edit_text(
+            "❌ Failed to post. Check bot channel permissions and logs."
+        )
 
     await query.answer()

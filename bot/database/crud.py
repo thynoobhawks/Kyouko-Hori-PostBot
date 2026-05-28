@@ -43,12 +43,10 @@ async def get_post_by_deep_link(deep_link_id: str) -> Optional[dict]:
 
 
 # ── Templates ─────────────────────────────────────────────────────────────────
-
-# New variables added: {genres} {year} {rating} {total_episodes} {studio} {anilist_url}
-# The \u200b (zero-width space) hyperlinked to the cover image triggers Telegram link preview
+# Note: No &#8205; trick needed — cover image is sent as actual photo
+# Caption is used for channel posts and bot messages
 
 DEFAULT_CHANNEL_TEMPLATE = (
-    '<a href="{cover_image}">&#8205;</a>'
     "<b>{title} • EP{episode}</b>\n"
     "<i>{english_title}</i>\n\n"
     "─────────────────────\n"
@@ -67,10 +65,12 @@ DEFAULT_CHANNEL_TEMPLATE = (
 )
 
 DEFAULT_BOT_TEMPLATE = (
-    '<a href="{cover_image}">&#8205;</a>'
     "<b>{title}</b>\n"
-    "<b>Episode {episode}</b>\n\n"
-    "<b>Available:</b> {qualities}\n\n"
+    "<i>{english_title}</i>\n\n"
+    "<b>EPISODE</b> • {episode}\n"
+    "<b>YEAR</b> • {year}\n"
+    "<b>GENRES</b> • {genres}\n"
+    "<b>RATING</b> • {rating}/100\n\n"
     "<i>Select preferred quality below.</i>"
 )
 

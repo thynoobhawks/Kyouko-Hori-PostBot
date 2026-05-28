@@ -3,7 +3,7 @@ bot/handlers/settings.py — Admin settings commands.
 """
 
 import logging
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import Message
 from pyrogram.handlers import MessageHandler
 
@@ -30,8 +30,6 @@ def register(client: Client) -> None:
     ))
 
 
-# ── /setmainchannel ───────────────────────────────────────────────────────────
-
 async def _set_channel(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
         return
@@ -44,7 +42,7 @@ async def _set_channel(client: Client, message: Message) -> None:
             await message.reply(
                 "⚠️ Invalid channel ID. Use a numeric ID like <code>-1001234567890</code>\n"
                 "Or forward a message from the channel.",
-                parse_mode="html",
+                parse_mode=enums.ParseMode.HTML,
             )
             return
         await _save_channel(message, channel_id)
@@ -54,7 +52,7 @@ async def _set_channel(client: Client, message: Message) -> None:
             "📡 Forward any message from the target channel,\n"
             "or send the channel ID directly (e.g. <code>-1001234567890</code>).\n\n"
             "/cancel to abort.",
-            parse_mode="html",
+            parse_mode=enums.ParseMode.HTML,
         )
 
 
@@ -77,11 +75,9 @@ async def _save_channel(message: Message, channel_id: int) -> None:
     fsm.clear(message.from_user.id)
     await message.reply(
         f"✅ Main channel set to <code>{channel_id}</code>.",
-        parse_mode="html",
+        parse_mode=enums.ParseMode.HTML,
     )
 
-
-# ── /settings ─────────────────────────────────────────────────────────────────
 
 async def _show_settings(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -96,16 +92,14 @@ async def _show_settings(client: Client, message: Message) -> None:
         "<b>Commands:</b>\n"
         "• /setmainchannel — set post channel\n"
         "• /post &lt;name&gt; — create anime post\n"
-        "• /settemplate channel_post — edit channel template\n"
-        "• /settemplate bot_message — edit bot message template\n"
-        "• /gettemplate channel_post — view template\n"
+        "• /settemplate channel_post\n"
+        "• /settemplate bot_message\n"
+        "• /gettemplate channel_post\n"
         "• /cancel — cancel current operation\n"
         "• /skip — skip current quality input"
     )
-    await message.reply(text, parse_mode="html")
+    await message.reply(text, parse_mode=enums.ParseMode.HTML)
 
-
-# ── /settemplate ──────────────────────────────────────────────────────────────
 
 async def _set_template_cmd(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -114,9 +108,8 @@ async def _set_template_cmd(client: Client, message: Message) -> None:
     args = message.command[1:]
     if not args or args[0] not in ("channel_post", "bot_message"):
         await message.reply(
-            "Usage: <code>/settemplate channel_post</code> or <code>/settemplate bot_message</code>\n\n"
-            "Then send the template text in your next message.",
-            parse_mode="html",
+            "Usage: <code>/settemplate channel_post</code> or <code>/settemplate bot_message</code>",
+            parse_mode=enums.ParseMode.HTML,
         )
         return
 
@@ -124,11 +117,10 @@ async def _set_template_cmd(client: Client, message: Message) -> None:
     fsm.set_state(message.from_user.id, fsm.AWAIT_TEMPLATE, {"template_name": template_name})
     await message.reply(
         f"✏️ Send the new template for <b>{template_name}</b>.\n\n"
-        "Available variables: <code>{title}</code> <code>{english_title}</code> "
+        "Variables: <code>{title}</code> <code>{english_title}</code> "
         "<code>{episode}</code> <code>{season}</code> <code>{qualities}</code> "
-        "<code>{download_link}</code>\n\n"
-        "/cancel to abort.",
-        parse_mode="html",
+        "<code>{download_link}</code>\n\n/cancel to abort.",
+        parse_mode=enums.ParseMode.HTML,
     )
 
 
@@ -143,10 +135,11 @@ async def _template_text_handler(client: Client, message: Message) -> None:
     template_name = data.get("template_name")
     await set_template(template_name, message.text)
     fsm.clear(uid)
-    await message.reply(f"✅ Template <b>{template_name}</b> saved.", parse_mode="html")
+    await message.reply(
+        f"✅ Template <b>{template_name}</b> saved.",
+        parse_mode=enums.ParseMode.HTML,
+    )
 
-
-# ── /gettemplate ──────────────────────────────────────────────────────────────
 
 async def _get_template_cmd(client: Client, message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -156,8 +149,7 @@ async def _get_template_cmd(client: Client, message: Message) -> None:
     name = args[0] if args else "channel_post"
     content = await get_template(name)
     await message.reply(
-        f"<b>Template: {escape_html(name)}</b>\n\n"
-        f"<code>{escape_html(content)}</code>",
-        parse_mode="html",
+        f"<b>Template: {escape_html(name)}</b>\n\n<code>{escape_html(content)}</code>",
+        parse_mode=enums.ParseMode.HTML,
     )
 

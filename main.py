@@ -1,15 +1,10 @@
 """
 main.py — Entry point for the Anime Auto Post Bot.
-Uses Pyrogram in polling mode started as a background task,
-with FastAPI only for the health endpoint and keeping Render alive.
-
-NOTE: Pyrogram does not support true webhook update injection.
-We run Pyrogram's built-in polling (idle) alongside FastAPI using asyncio.
-This is the correct lightweight pattern for Render free tier.
 """
 
 import asyncio
 import logging
+import subprocess
 
 import uvicorn
 from fastapi import FastAPI, Response
@@ -27,8 +22,21 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+def install_playwright():
+    """Install Playwright Chromium browser on startup (required on Render)."""
+    try:
+        log.info("Installing Playwright Chromium…")
+        subprocess.run(
+            ["playwright", "install", "chromium", "--with-deps"],
+            check=True,
+            capture_output=True,
+        )
+        log.info("✅ Playwright Chromium ready.")
+    except Exception as e:
+        log.warning(f"Playwright install skipped: {e}")
+
+
 async def delete_webhook():
-    """Remove any existing webhook so polling works cleanly."""
     import aiohttp
     url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/deleteWebhook"
     async with aiohttp.ClientSession() as session:
@@ -36,18 +44,16 @@ async def delete_webhook():
             data = await resp.json()
             if data.get("ok"):
                 log.info("✅ Webhook deleted — polling mode active.")
-            else:
-                log.warning(f"deleteWebhook response: {data}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("🚀 Starting bot…")
+    install_playwright()
     await db.connect()
     create_app(bot)
     await delete_webhook()
     await bot.start()
-    # Run Pyrogram polling in background
     asyncio.create_task(_run_polling())
     yield
     log.info("🛑 Shutting down…")
@@ -56,7 +62,6 @@ async def lifespan(app: FastAPI):
 
 
 async def _run_polling():
-    """Keep Pyrogram running — it handles incoming updates via long polling."""
     from pyrogram import idle
     log.info("🔄 Pyrogram polling started.")
     await idle()
@@ -67,7 +72,6 @@ app = FastAPI(lifespan=lifespan, title="Anime Bot", docs_url=None, redoc_url=Non
 
 @app.get("/health")
 async def health():
-    """Keep-alive endpoint for UptimeRobot pings."""
     return {"status": "ok", "bot": config.BOT_USERNAME}
 
 

@@ -4,6 +4,7 @@ main.py — Entry point for the Anime Auto Post Bot.
 
 import asyncio
 import logging
+import os
 import subprocess
 
 import uvicorn
@@ -23,13 +24,16 @@ log = logging.getLogger(__name__)
 
 
 def install_playwright():
-    """Install Playwright Chromium browser on startup (required on Render)."""
+    """Install Playwright Chromium — without system deps (no root needed)."""
     try:
         log.info("Installing Playwright Chromium…")
+        env = os.environ.copy()
+        env["PLAYWRIGHT_BROWSERS_PATH"] = "/opt/render/project/.playwright"
         subprocess.run(
-            ["playwright", "install", "chromium", "--with-deps"],
+            ["playwright", "install", "chromium"],
             check=True,
             capture_output=True,
+            env=env,
         )
         log.info("✅ Playwright Chromium ready.")
     except Exception as e:

@@ -1,7 +1,6 @@
 """
 bot/database/mongo.py — Async MongoDB client using Motor.
-Provides a single shared `db` instance used across the app.
-Data is stored on MongoDB Atlas so it survives redeployments.
+All data persists on MongoDB Atlas across Render redeployments.
 """
 
 import logging
@@ -12,8 +11,6 @@ log = logging.getLogger(__name__)
 
 
 class MongoDB:
-    """Thin wrapper around Motor so we can connect/disconnect cleanly."""
-
     def __init__(self):
         self._client: AsyncIOMotorClient | None = None
         self.db: AsyncIOMotorDatabase | None = None
@@ -22,24 +19,22 @@ class MongoDB:
         log.info("Connecting to MongoDB Atlas…")
         self._client = AsyncIOMotorClient(config.MONGO_URI, serverSelectionTimeoutMS=5000)
         self.db = self._client[config.DB_NAME]
-        # Validate connection
         await self._client.admin.command("ping")
         log.info("✅ MongoDB connected.")
-
-        # Ensure indexes
         await self._ensure_indexes()
 
     async def _ensure_indexes(self):
         await self.db.anime_posts.create_index("deep_link_id", unique=True)
         await self.db.anime_posts.create_index("created_at")
         await self.db.settings.create_index("key", unique=True)
+        await self.db.templates.create_index("name", unique=True)
+        # Users — permanent storage for broadcast
+        await self.db.users.create_index("user_id", unique=True)
+        log.info("✅ MongoDB indexes ensured.")
 
     async def close(self):
         if self._client:
             self._client.close()
-            log.info("MongoDB connection closed.")
-
-    # ── Convenience shorthand properties ─────────────────────────────────────
 
     @property
     def settings(self):
@@ -56,6 +51,10 @@ class MongoDB:
     @property
     def channels(self):
         return self.db["channels"]
+
+    @property
+    def users(self):
+        return self.db["users"]
 
 
 db = MongoDB()

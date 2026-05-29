@@ -4,7 +4,7 @@ services:
     env: python
     region: oregon
     plan: free
-    buildCommand: pip install --only-binary=greenlet greenlet==3.0.3 && pip install -r requirements.txt && playwright install chromium --with-deps
+    buildCommand: pip install --only-binary=greenlet greenlet==3.3.0 && pip install -r requirements.txt && playwright install chromium --with-deps
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:

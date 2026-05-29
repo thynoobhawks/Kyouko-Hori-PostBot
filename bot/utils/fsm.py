@@ -1,29 +1,21 @@
 """
-bot/utils/fsm.py — Lightweight in-memory FSM for multi-step conversations.
-
-States are keyed by user_id. Each entry is a small dict:
-    {
-        "state": "AWAIT_480P",
-        "data":  { ... }          # accumulates session data
-    }
-
-Stored in-process only — resets on restart (which is fine; conversations
-are short-lived and we persist the final result to MongoDB).
+bot/utils/fsm.py — Lightweight in-memory FSM.
 """
 
 from typing import Any, Optional
 
 _sessions: dict[int, dict] = {}
 
-# ── State names ───────────────────────────────────────────────────────────────
-IDLE           = "IDLE"
-AWAIT_480P     = "AWAIT_480P"
-AWAIT_720P     = "AWAIT_720P"
-AWAIT_1080P    = "AWAIT_1080P"
-AWAIT_4K       = "AWAIT_4K"
-AWAIT_CONFIRM  = "AWAIT_CONFIRM"
-AWAIT_CHANNEL  = "AWAIT_CHANNEL"
-AWAIT_TEMPLATE = "AWAIT_TEMPLATE"
+IDLE            = "IDLE"
+AWAIT_480P      = "AWAIT_480P"
+AWAIT_720P      = "AWAIT_720P"
+AWAIT_1080P     = "AWAIT_1080P"
+AWAIT_4K        = "AWAIT_4K"
+AWAIT_CONFIRM   = "AWAIT_CONFIRM"
+AWAIT_CHANNEL   = "AWAIT_CHANNEL"
+AWAIT_TEMPLATE  = "AWAIT_TEMPLATE"
+AWAIT_MEDIA     = "AWAIT_MEDIA"
+AWAIT_BROADCAST = "AWAIT_BROADCAST"
 
 QUALITY_STATES = [AWAIT_480P, AWAIT_720P, AWAIT_1080P, AWAIT_4K]
 QUALITY_LABELS = ["480p", "720p", "1080p", "4K"]

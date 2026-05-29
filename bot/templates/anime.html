@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  />
+
+  <title>{{ title_english }}</title>
+
+  <style>
+    {{ css }}
+  </style>
+</head>
+
+<body>
+
+<div class="card">
+
+  <!-- Background decorations -->
+
+  <div class="bg-anime-text" aria-hidden="true">
+    ANIME
+  </div>
+
+  <div class="deco-dots deco-dots--tl" aria-hidden="true"></div>
+
+  <div class="deco-slashes deco-slashes--tr" aria-hidden="true">
+    <span></span>
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <div class="deco-slashes deco-slashes--br" aria-hidden="true">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <!-- LEFT PANEL -->
+
+  <div class="left-panel">
+
+    <!-- Header -->
+
+    <div class="header-row">
+
+      <span class="h-season">
+        {{ season_header }}
+      </span>
+
+      <span class="h-bullet">
+        •
+      </span>
+
+      <span class="h-series">
+        TV SERIES
+      </span>
+
+      <span class="h-pipe">
+        |
+      </span>
+
+      <span class="h-watermark">
+        Anime Abyss | GakuenLab
+      </span>
+
+    </div>
+
+    <!-- Title -->
+
+    <div class="title-block">
+
+      <h1 class="main-title {{ title_class }}">
+        {{ title_english }}
+      </h1>
+
+      {% if show_romaji %}
+      <div class="romaji-sub">
+        {{ title_romaji }}
+      </div>
+      {% endif %}
+
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Info Grid -->
+
+    <div class="info-grid">
+
+      <!-- Season -->
+
+      <div class="info-item">
+
+        <div class="info-icon-box">
+
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#FF6B1A"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+
+          </svg>
+
+        </div>
+
+        <div class="info-text">
+
+          <span class="info-label">
+            Season
+          </span>
+
+          <span class="info-value">
+            {{ season_display }}
+          </span>
+
+        </div>
+
+      </div>
+
+      <!-- Format -->
+
+      <div class="info-item">
+
+        <div class="info-icon-box">
+
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="#FF6B1A"
+          >
+
+            <polygon points="5 3 19 12 5 21 5 3"/>
+
+          </svg>
+
+        </div>
+
+        <div class="info-text">
+
+          <span class="info-label">
+            Format
+          </span>
+
+          <span class="info-value">
+            {{ format }}
+          </span>
+
+        </div>
+
+      </div>
+
+      <!-- Episodes -->
+
+      <div class="info-item">
+
+        <div class="info-icon-box">
+
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#FF6B1A"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+
+            <rect x="2" y="2" width="20" height="20" rx="2"/>
+
+            <line x1="7" y1="2" x2="7" y2="22"/>
+            <line x1="17" y1="2" x2="17" y2="22"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+
+          </svg>
+
+        </div>
+
+        <div class="info-text">
+
+          <span class="info-label">
+            Episodes
+          </span>
+
+          <span class="info-value">
+            {{ episodes }}
+          </span>
+
+        </div>
+
+      </div>
+
+      <!-- Rating -->
+
+      <div class="info-item">
+
+        <div class="info-icon-box">
+
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="#FF6B1A"
+          >
+
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+
+          </svg>
+
+        </div>
+
+        <div class="info-text">
+
+          <span class="info-label">
+            Rating
+          </span>
+
+          <span class="info-value">
+            {{ rating }}
+          </span>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Genres -->
+
+    <div class="section">
+
+      <div class="section-label">
+        GENRES
+      </div>
+
+      <div class="genres-row">
+
+        {% for genre in genres %}
+        <span class="genre-pill">
+          {{ genre }}
+        </span>
+        {% endfor %}
+
+      </div>
+
+    </div>
+
+    <!-- Studio -->
+
+    <div class="section">
+
+      <div class="section-label">
+        STUDIO
+      </div>
+
+      <div class="studio-name">
+        {{ studio if studio else "Unknown Studio" }}
+      </div>
+
+    </div>
+
+    <!-- Synopsis -->
+
+    <div class="synopsis-box">
+
+      <div class="quote-icon">
+        &ldquo;
+      </div>
+
+      <p class="synopsis-text">
+        {{ description[:260] }}{% if description|length > 260 %}...{% endif %}
+      </p>
+
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+
+  <div class="right-panel">
+
+    <div class="poster-wrap">
+
+      <div class="poster-frame">
+
+        {% if poster_b64 %}
+
+        <img
+          class="poster-img"
+          src="{{ poster_b64 }}"
+          alt="Anime Poster"
+        />
+
+        {% else %}
+
+        <div class="poster-placeholder">
+          <span>No Poster</span>
+        </div>
+
+        {% endif %}
+
+      </div>
+
+    </div>
+
+    <!-- Side Tab -->
+
+    <div class="side-tab">
+
+      <span class="side-label">
+        {{ side_label }}
+      </span>
+
+    </div>
+
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -2,14 +2,14 @@ services:
   - type: web
     name: anime-bot
     env: python
-    region: oregon        # closest free-tier region; change if needed
+    region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --only-binary=greenlet greenlet==3.0.3 && pip install -r requirements.txt && playwright install chromium --with-deps
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: BOT_TOKEN
-        sync: false       # set manually in Render dashboard
+        sync: false
       - key: BOT_USERNAME
         sync: false
       - key: API_ID
@@ -23,6 +23,6 @@ services:
       - key: DB_NAME
         value: animebot
       - key: WEBHOOK_URL
-        sync: false       # set to your Render service URL after first deploy
+        sync: false
       - key: PORT
-        value: "10000"    # Render assigns 10000 by default for free tier
+        value: "10000"

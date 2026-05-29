@@ -1,71 +1,126 @@
 """
-bot/handlers/start.py — /start handler + user registration.
-Every user who starts the bot is saved permanently to MongoDB.
+bot/database/crud.py — All database read/write operations.
+All data stored in MongoDB Atlas — survives redeployments permanently.
 """
 
-import logging
-from pyrogram import Client, filters, enums
-from pyrogram.types import Message
-from pyrogram.handlers import MessageHandler
+from datetime import datetime, timezone
+from typing import Optional
+import nanoid
 
-from bot.database.crud import get_post_by_deep_link, save_user, get_user_count
-from bot.services.post_builder import send_quality_selection
-from bot.utils.admin import is_admin
-
-log = logging.getLogger(__name__)
+from bot.database.mongo import db
 
 
-def register(client: Client) -> None:
-    client.add_handler(MessageHandler(
-        _start_handler,
-        filters.command("start") & filters.private,
-    ))
-    client.add_handler(MessageHandler(
-        _users_cmd,
-        filters.command("users") & filters.private,
-    ))
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+async def get_setting(key: str) -> Optional[str]:
+    doc = await db.settings.find_one({"key": key})
+    return doc["value"] if doc else None
 
 
-async def _start_handler(client: Client, message: Message) -> None:
-    user = message.from_user
-
-    # Save user permanently to MongoDB
-    await save_user(
-        user_id=user.id,
-        username=user.username or "",
-        first_name=user.first_name or "",
+async def set_setting(key: str, value) -> None:
+    await db.settings.update_one(
+        {"key": key},
+        {"$set": {"key": key, "value": value, "updated_at": _now()}},
+        upsert=True,
     )
 
-    args = message.command[1:]
-    if args:
-        await _handle_deep_link(client, message, args[0].strip())
-    else:
-        await _send_welcome(message)
+
+async def get_main_channel() -> Optional[int]:
+    val = await get_setting("main_channel_id")
+    return int(val) if val else None
 
 
-async def _handle_deep_link(client: Client, message: Message, deep_link_id: str) -> None:
-    post = await get_post_by_deep_link(deep_link_id)
-    if not post:
-        await message.reply("⚠️ This link is invalid or the post was removed.", quote=True)
-        return
-    await send_quality_selection(client, message.chat.id, post)
+async def set_main_channel(channel_id: int) -> None:
+    await set_setting("main_channel_id", str(channel_id))
 
 
-async def _send_welcome(message: Message) -> None:
-    text = (
-        "<b>🎌 Anime Bot</b>\n\n"
-        "I post anime episodes to the channel and provide quality download links.\n\n"
-        "<i>Click a download button in the channel to get started.</i>"
+# ── Users ─────────────────────────────────────────────────────────────────────
+
+async def save_user(user_id: int, username: str = "", first_name: str = "") -> None:
+    """Save user to DB permanently. Upsert so no duplicates."""
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "user_id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "last_seen": _now(),
+        },
+        "$setOnInsert": {"joined_at": _now()}},
+        upsert=True,
     )
-    await message.reply(text, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
 
 
-async def _users_cmd(client: Client, message: Message) -> None:
-    """Admin command to check total registered users."""
-    if not is_admin(message.from_user.id):
-        return
-    count = await get_user_count()
-    await message.reply(
-        f"👥 <b>Total Users:</b> <code>{count}</code>",
-        parse_mode=enums.ParseMode.HTML,
+async def get_all_users() -> list[int]:
+    """Return list of all user IDs."""
+    cursor = db.users.find({}, {"user_id": 1})
+    return [doc["user_id"] async for doc in cursor]
+
+
+async def get_user_count() -> int:
+    return await db.users.count_documents({})
+
+
+# ── Anime posts ───────────────────────────────────────────────────────────────
+
+async def create_anime_post(data: dict) -> str:
+    deep_link_id = nanoid.generate(size=10)
+    doc = {**data, "deep_link_id": deep_link_id, "created_at": _now()}
+    await db.anime_posts.insert_one(doc)
+    return deep_link_id
+
+
+async def get_post_by_deep_link(deep_link_id: str) -> Optional[dict]:
+    return await db.anime_posts.find_one({"deep_link_id": deep_link_id})
+
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+
+DEFAULT_CHANNEL_TEMPLATE = (
+    "<b>{title} • EP{episode}</b>\n"
+    "<i>{english_title}</i>\n\n"
+    "─────────────────────\n\n"
+    "<b>EPISODE</b> • {episode}\n"
+    "<b>AUDIO</b> • JAPANESE\n"
+    "<b>SUBTITLES</b> • ENGLISH SUBS\n\n"
+    "<b>YEAR</b> • {year}\n"
+    "<b>GENRES</b> • {genres}\n"
+    "<b>RATING</b> • {rating}/100\n\n"
+    "─────────────────────\n\n"
+    "<b>AVAILABLE QUALITIES</b>\n"
+    "{qualities}\n\n"
+    "<a href=\"{download_link}\">ᴅᴏᴡɴʟᴏᴀᴅ ᴇᴘɪꜱᴏᴅᴇ</a>"
+)
+
+DEFAULT_BOT_TEMPLATE = (
+    "<b>{title}</b>\n"
+    "<i>{english_title}</i>\n\n"
+    "<b>EPISODE</b> • {episode}\n"
+    "<b>YEAR</b> • {year}\n"
+    "<b>GENRES</b> • {genres}\n"
+    "<b>RATING</b> • {rating}/100\n\n"
+    "<i>Select preferred quality below.</i>"
+)
+
+
+async def get_template(name: str) -> str:
+    doc = await db.templates.find_one({"name": name})
+    if doc:
+        return doc["content"]
+    defaults = {
+        "channel_post": DEFAULT_CHANNEL_TEMPLATE,
+        "bot_message": DEFAULT_BOT_TEMPLATE,
+    }
+    return defaults.get(name, "")
+
+
+async def set_template(name: str, content: str) -> None:
+    await db.templates.update_one(
+        {"name": name},
+        {"$set": {"name": name, "content": content, "updated_at": _now()}},
+        upsert=True,
     )
+
+
+def _now():
+    return datetime.now(timezone.utc)

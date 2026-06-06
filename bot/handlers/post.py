@@ -1,6 +1,5 @@
 """
-bot/handlers/post.py — /post, /skip, /cancel commands only.
-Text/media routing handled by text_router.py and broadcast.py.
+bot/handlers/post.py — /post, /skip, /cancel with new UI.
 """
 
 import logging
@@ -10,9 +9,9 @@ from pyrogram.handlers import MessageHandler
 
 from bot.services.anilist import fetch_anime
 from bot.utils.admin import is_admin
-from bot.utils.html import escape_html
 from bot.utils import fsm
 from bot.database.crud import get_main_channel
+from bot.ui import messages, keyboards
 
 log = logging.getLogger(__name__)
 
@@ -29,16 +28,19 @@ async def _post_command(client: Client, message: Message) -> None:
 
     channel = await get_main_channel()
     if not channel:
-        await message.reply("⚠️ No main channel set. Use /setmainchannel first.", quote=True)
+        await message.reply(
+            messages.no_channel(),
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=keyboards.channel_menu(),
+        )
         return
 
     args = message.command[1:]
     if not args:
         await message.reply(
-            "Usage: <code>/post Anime Name Episode Number</code>\n"
-            "Example: <code>/post Dandadan Episode 08</code>",
+            messages.post_creator(),
             parse_mode=enums.ParseMode.HTML,
-            quote=True,
+            reply_markup=keyboards.post_creator_menu(),
         )
         return
 
@@ -46,14 +48,17 @@ async def _post_command(client: Client, message: Message) -> None:
     uid = message.from_user.id
     fsm.clear(uid)
 
-    status_msg = await message.reply("🔍 Fetching anime info from AniList…", quote=True)
+    status_msg = await message.reply(
+        messages.post_fetching(raw_query),
+        parse_mode=enums.ParseMode.HTML,
+    )
 
     anime = await fetch_anime(raw_query)
     if not anime:
         await status_msg.edit_text(
-            f"❌ Could not find: <b>{escape_html(raw_query)}</b>\n\n"
-            "Tips:\n• Use exact anime title\n• Try English or Romaji\n• Remove episode number",
+            messages.post_not_found(raw_query),
             parse_mode=enums.ParseMode.HTML,
+            reply_markup=keyboards.back_to_main(),
         )
         return
 
@@ -68,15 +73,14 @@ async def _post_command(client: Client, message: Message) -> None:
     })
 
     await status_msg.edit_text(
-        _anime_preview_text(anime, episode_hint),
+        messages.post_found(anime, episode_hint),
         parse_mode=enums.ParseMode.HTML,
         disable_web_page_preview=True,
     )
     await message.reply(
-        "🖼 <b>Custom Poster (Optional)</b>\n\n"
-        "Send a <b>photo</b> or <b>video</b> to use as post media.\n"
-        "Or /skip to use auto-generated card.",
+        messages.post_custom_media(),
         parse_mode=enums.ParseMode.HTML,
+        reply_markup=keyboards.skip_cancel_row(),
     )
 
 
@@ -90,15 +94,17 @@ async def _skip_command(client: Client, message: Message) -> None:
     if state == fsm.AWAIT_MEDIA:
         fsm.set_state(uid, fsm.AWAIT_480P)
         await message.reply(
-            "⏭ Using auto-generated card.\n\n"
-            "📎 Send the <b>480p</b> download link.\nOr /skip. /cancel to abort.",
+            messages.post_quality_prompt("480p"),
             parse_mode=enums.ParseMode.HTML,
-            quote=True,
+            reply_markup=keyboards.skip_cancel_row(),
         )
         return
 
     if state not in fsm.QUALITY_STATES:
-        await message.reply("Nothing to skip right now.", quote=True)
+        await message.reply(
+            messages.nothing_to_skip(),
+            parse_mode=enums.ParseMode.HTML,
+        )
         return
 
     label = fsm.quality_label_for_state(state)
@@ -106,18 +112,15 @@ async def _skip_command(client: Client, message: Message) -> None:
 
     if next_state == fsm.AWAIT_CONFIRM:
         fsm.set_state(uid, fsm.AWAIT_CONFIRM)
-        await message.reply(f"⏭ Skipped {label}.", quote=True)
-        # Trigger preview via text_router
         from bot.handlers.text_router import _send_preview
         await _send_preview(message, uid)
     else:
         fsm.set_state(uid, next_state)
         next_label = fsm.quality_label_for_state(next_state)
         await message.reply(
-            f"⏭ Skipped {label}.\n\n"
-            f"📎 Send the <b>{next_label.upper()}</b> link, /skip, or /cancel.",
+            messages.post_skipped(label, next_label),
             parse_mode=enums.ParseMode.HTML,
-            quote=True,
+            reply_markup=keyboards.skip_cancel_row(),
         )
 
 
@@ -126,19 +129,9 @@ async def _cancel_command(client: Client, message: Message) -> None:
     if not is_admin(uid):
         return
     fsm.clear(uid)
-    await message.reply("🚫 Post creation cancelled.", quote=True)
-
-
-def _anime_preview_text(anime: dict, episode: str) -> str:
-    genres = ", ".join(anime.get("genres", [])[:4]) or "N/A"
-    return (
-        f"<b>✅ Found: {escape_html(anime['title_romaji'])}</b>\n"
-        f"<i>{escape_html(anime['title_english'])}</i>\n\n"
-        f"<b>Episode:</b> {escape_html(str(episode))}\n"
-        f"<b>Season:</b> {escape_html(str(anime['season']))} {anime.get('season_year','')}\n"
-        f"<b>Episodes:</b> {anime['total_episodes']}\n"
-        f"<b>Rating:</b> {anime['rating']}/100\n"
-        f"<b>Genres:</b> {escape_html(genres)}\n\n"
-        f"<i>{escape_html(anime['synopsis'])}</i>"
+    await message.reply(
+        messages.post_cancelled(),
+        parse_mode=enums.ParseMode.HTML,
+        reply_markup=keyboards.back_to_main(),
     )
 

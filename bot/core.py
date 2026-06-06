@@ -1,5 +1,5 @@
 """
-bot/core.py — Creates and configures the Pyrogram bot client.
+bot/core.py — Bot client and handler registration.
 """
 
 import logging
@@ -23,13 +23,14 @@ bot: Client = _build_client()
 
 
 def create_app(client: Client) -> None:
-    from bot.handlers import start, post, settings, callbacks, broadcast, text_router
+    from bot.handlers import start, post, settings, callbacks, broadcast, text_router, menu
 
     start.register(client)
     post.register(client)
     settings.register(client)
+    menu.register(client)        # dashboard navigation
     callbacks.register(client)
     broadcast.register(client)
-    text_router.register(client)  # ← must be LAST
+    text_router.register(client) # always last
 
     log.info("✅ All handlers registered.")

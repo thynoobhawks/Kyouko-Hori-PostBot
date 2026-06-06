@@ -15,7 +15,7 @@ from bot.ui import messages, keyboards, theme
 log = logging.getLogger(__name__)
 
 # Replace with your actual Hori image URL
-WELCOME_IMAGE = "https://files.catbox.moe/your-hori-image.jpg"
+WELCOME_IMAGE = "https://i.ibb.co/G336Bz0n/tmpe-4ymly6.jpg"
 
 
 def register(client: Client) -> None:

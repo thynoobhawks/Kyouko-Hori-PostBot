@@ -1,8 +1,5 @@
 """
-bot/handlers/text_router.py — Single unified text message router.
-
-All FSM text handling goes through here to avoid handler conflicts.
-Checks state and routes to the correct handler.
+bot/handlers/text_router.py — Unified text router with new UI.
 """
 
 import logging
@@ -13,13 +10,14 @@ from pyrogram.handlers import MessageHandler
 from bot.utils import fsm
 from bot.utils.admin import is_admin
 from bot.database.crud import set_template, set_main_channel
+from bot.ui import messages, keyboards
 
 log = logging.getLogger(__name__)
 
 IGNORED_COMMANDS = [
     "start", "cancel", "skip", "setmainchannel",
     "settemplate", "gettemplate", "settings", "post",
-    "broadcast", "cancelbroadcast", "users"
+    "broadcast", "cancelbroadcast", "users", "menu"
 ]
 
 
@@ -37,83 +35,66 @@ async def _unified_text_router(client: Client, message: Message) -> None:
 
     state = fsm.get_state(uid)
 
-    # ── Template saving ───────────────────────────────────────────────────────
     if state == fsm.AWAIT_TEMPLATE:
         await _handle_template(message, uid)
-        return
-
-    # ── Channel ID input ──────────────────────────────────────────────────────
-    if state == fsm.AWAIT_CHANNEL:
+    elif state == fsm.AWAIT_CHANNEL:
         await _handle_channel_id(message, uid)
-        return
-
-    # ── Broadcast text ────────────────────────────────────────────────────────
-    if state == fsm.AWAIT_BROADCAST:
-        # Handled by broadcast.py media handler — text goes there too
+    elif state == fsm.AWAIT_BROADCAST:
         from bot.handlers.broadcast import _do_broadcast
         await _do_broadcast(client, message, uid)
-        return
-
-    # ── Quality link input ────────────────────────────────────────────────────
-    if state in fsm.QUALITY_STATES:
-        await _handle_quality_link(client, message, uid, state)
-        return
+    elif state in fsm.QUALITY_STATES:
+        await _handle_quality_link(message, uid, state)
 
 
 async def _handle_template(message: Message, uid: int) -> None:
-    """Save template text to MongoDB."""
-    text = message.text
-
-    if "{cover_image}" in text:
+    if "{cover_image}" in message.text:
         await message.reply(
-            "⚠️ Remove <code>{cover_image}</code> from your template.\n"
-            "The cover image is sent automatically — it cannot go in caption text.\n\n"
-            "Send the template again without it.",
+            messages.error("remove {cover_image} from template — image is sent automatically"),
             parse_mode=enums.ParseMode.HTML,
         )
         return
 
     data = fsm.get_data(uid)
     template_name = data.get("template_name")
-
     if not template_name:
-        await message.reply("⚠️ Session expired. Use /settemplate again.")
+        await message.reply(messages.error("session expired — use /settemplate again"), parse_mode=enums.ParseMode.HTML)
         fsm.clear(uid)
         return
 
-    await set_template(template_name, text)
+    await set_template(template_name, message.text)
     fsm.clear(uid)
     await message.reply(
-        f"✅ Template <b>{template_name}</b> saved!",
+        messages.template_saved(template_name),
         parse_mode=enums.ParseMode.HTML,
+        reply_markup=keyboards.template_menu(),
     )
 
 
 async def _handle_channel_id(message: Message, uid: int) -> None:
-    """Save channel ID from text input."""
     try:
         channel_id = int(message.text.strip())
         await set_main_channel(channel_id)
         fsm.clear(uid)
         await message.reply(
-            f"✅ Main channel set to <code>{channel_id}</code>.",
+            messages.channel_saved(channel_id),
             parse_mode=enums.ParseMode.HTML,
+            reply_markup=keyboards.channel_menu(),
         )
     except ValueError:
         await message.reply(
-            "⚠️ Invalid channel ID. Send a number like <code>-1001234567890</code>",
+            messages.error("invalid id — send a number like -1001234567890"),
             parse_mode=enums.ParseMode.HTML,
         )
 
 
-async def _handle_quality_link(client: Client, message: Message, uid: int, state: str) -> None:
-    """Save quality link and advance FSM."""
-    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    from bot.utils.html import escape_html, SEPARATOR
-
+async def _handle_quality_link(message: Message, uid: int, state: str) -> None:
     link = message.text.strip()
     if not (link.startswith("http://") or link.startswith("https://") or link.startswith("tg://")):
-        await message.reply("⚠️ That doesn't look like a valid URL. Send a link or /skip.", quote=True)
+        await message.reply(
+            messages.error("that doesn't look like a valid url — send a link or skip"),
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=keyboards.skip_cancel_row(),
+        )
         return
 
     label = fsm.quality_label_for_state(state)
@@ -128,41 +109,26 @@ async def _handle_quality_link(client: Client, message: Message, uid: int, state
         fsm.set_state(uid, next_state, data)
         next_label = fsm.quality_label_for_state(next_state)
         await message.reply(
-            f"✅ Saved {label}.\n\n"
-            f"📎 Send the <b>{next_label.upper()}</b> link, /skip, or /cancel.",
+            messages.post_quality_saved(label, next_label),
             parse_mode=enums.ParseMode.HTML,
+            reply_markup=keyboards.skip_cancel_row(),
             quote=True,
         )
 
 
 async def _send_preview(message: Message, uid: int) -> None:
-    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    from bot.utils.html import escape_html, SEPARATOR
-
     data = fsm.get_data(uid)
     anime = data["anime_info"]
     qualities = data.get("qualities", {})
     episode = data.get("episode", "?")
     custom_media = data.get("custom_media")
     custom_media_type = data.get("custom_media_type")
+    media_source = f"custom {custom_media_type}" if custom_media else "auto card"
 
-    quality_text = "\n".join(f"  • {k}" for k in qualities.keys()) if qualities else "  • (none)"
-    media_source = f"Custom {custom_media_type}" if custom_media else "AniList cover / Auto card"
-
-    preview = (
-        f"<b>📋 Preview</b>\n{SEPARATOR}\n\n"
-        f"<b>{escape_html(anime['title_romaji'])}</b>\n"
-        f"<i>{escape_html(anime['title_english'])}</i>\n\n"
-        f"<b>Episode:</b> {escape_html(str(episode))}\n"
-        f"<b>Season:</b> {escape_html(str(anime['season']))}\n"
-        f"<b>Media:</b> {media_source}\n\n"
-        f"<b>Qualities:</b>\n{escape_html(quality_text)}\n\n"
-        f"{SEPARATOR}\n<i>Confirm to post to channel?</i>"
+    await message.reply(
+        messages.post_preview(anime, episode, qualities, media_source),
+        parse_mode=enums.ParseMode.HTML,
+        reply_markup=keyboards.post_confirm_menu(uid),
+        quote=True,
     )
 
-    markup = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Post Now", callback_data=f"confirm_post:{uid}"),
-        InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_post:{uid}"),
-    ]])
-
-    await message.reply(preview, parse_mode=enums.ParseMode.HTML, reply_markup=markup, quote=True)

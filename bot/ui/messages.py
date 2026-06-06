@@ -1,28 +1,28 @@
 """
-bot/ui/messages.py — All UI message strings in one place.
-
-Uses theme.py for consistent typography.
-Every screen has its own function returning formatted HTML.
+bot/ui/messages.py — All UI message strings.
 """
 
 from bot.ui.theme import (
     sc, bold, italic, bq, bullets, bullet,
-    header, section, message, DIV, BULLET
+    header, DIV, BULLET
 )
 
 
 # ── Welcome ───────────────────────────────────────────────────────────────────
 
 def welcome(first_name: str) -> str:
+    items = [
+        "create anime posts automatically",
+        "upload content manually",
+        "generate custom redirect links",
+        "manage channels from one dashboard",
+        "publish multiple qualities with a single workflow",
+    ]
     return (
         f"{bold(sc('welcome'))}, {first_name}\n"
         f"{italic(sc('i am your anime publishing assistant'))}\n\n"
         f"{DIV}\n\n"
-        f"{bullets(['create anime posts automatically',
-                    'upload content manually',
-                    'generate custom redirect links',
-                    'manage channels from one dashboard',
-                    'publish multiple qualities with a single workflow'])}\n\n"
+        f"{bullets(items)}\n\n"
         f"{bq(italic(sc('select an option below to get started')), expandable=True)}"
     )
 
@@ -39,13 +39,13 @@ def main_menu() -> str:
 # ── Post Creator ──────────────────────────────────────────────────────────────
 
 def post_creator() -> str:
-    return (
-        f"{bold(sc('post creator'))}\n\n"
-        f"{bullets(['create a new anime post',
-                    'select quality options',
-                    'configure redirect links',
-                    'publish to your channel instantly'])}"
-    )
+    items = [
+        "create a new anime post",
+        "select quality options",
+        "configure redirect links",
+        "publish to your channel instantly",
+    ]
+    return f"{bold(sc('post creator'))}\n\n{bullets(items)}"
 
 
 def post_fetching(query: str) -> str:
@@ -58,6 +58,7 @@ def post_fetching(query: str) -> str:
 
 def post_found(anime: dict, episode: str) -> str:
     genres = ", ".join(anime.get("genres", [])[:4]) or "n/a"
+    synopsis = anime.get("synopsis", "")
     return (
         f"{bold(sc('anime found'))}\n\n"
         f"{bold(anime['title_romaji'])}\n"
@@ -68,16 +69,16 @@ def post_found(anime: dict, episode: str) -> str:
         f"{bullet(sc('episodes'))} · {anime.get('total_episodes', '?')}\n"
         f"{bullet(sc('rating'))} · {anime.get('rating', 'n/a')}/100\n"
         f"{bullet(sc('genres'))} · {genres}\n\n"
-        f"{bq(italic(anime.get('synopsis', '')), expandable=True)}"
+        f"{bq(italic(synopsis), expandable=True)}"
     )
 
 
 def post_custom_media() -> str:
-    return (
-        f"{bold(sc('custom poster'))}\n\n"
-        f"{bullets(['send a photo or video to use as post media',
-                    'or skip to use the auto-generated card'])}"
-    )
+    items = [
+        "send a photo or video to use as post media",
+        "or skip to use the auto-generated card",
+    ]
+    return f"{bold(sc('custom poster'))}\n\n{bullets(items)}"
 
 
 def post_quality_prompt(label: str) -> str:
@@ -158,17 +159,20 @@ def post_not_found(query: str) -> str:
     )
 
 
-# ── Channel Management ────────────────────────────────────────────────────────
+# ── Channel ───────────────────────────────────────────────────────────────────
 
-def channel_dashboard(channel_id: str = None) -> str:
+def channel_dashboard(channel_id=None) -> str:
     status = sc(str(channel_id)) if channel_id else italic(sc("not configured"))
+    items = [
+        "add or remove channels",
+        "edit channel settings",
+        "set default templates",
+        "configure broadcast options",
+    ]
     return (
         f"{bold(sc('channel dashboard'))}\n\n"
         f"{bullet(sc('active channel'))} · {status}\n\n"
-        f"{bullets(['add or remove channels',
-                    'edit channel settings',
-                    'set default templates',
-                    'configure broadcast options'])}"
+        f"{bullets(items)}"
     )
 
 
@@ -191,17 +195,17 @@ def channel_saved(channel_id: int) -> str:
 # ── Templates ─────────────────────────────────────────────────────────────────
 
 def template_dashboard() -> str:
-    return (
-        f"{bold(sc('templates'))}\n\n"
-        f"{bullets(['edit channel post template',
-                    'edit bot message template',
-                    'view current templates',
-                    'reset to defaults'])}"
-    )
+    items = [
+        "edit channel post template",
+        "edit bot message template",
+        "view current templates",
+        "reset to defaults",
+    ]
+    return f"{bold(sc('templates'))}\n\n{bullets(items)}"
 
 
 def template_prompt(name: str) -> str:
-    vars_list = (
+    vars_line = (
         "<code>{title}</code>  <code>{english_title}</code>  <code>{episode}</code>\n"
         "<code>{season}</code>  <code>{year}</code>  <code>{genres}</code>\n"
         "<code>{rating}</code>  <code>{total_episodes}</code>  <code>{studio}</code>\n"
@@ -210,17 +214,14 @@ def template_prompt(name: str) -> str:
     return (
         f"{bold(sc('edit template'))} · {bold(name)}\n\n"
         f"{bold(sc('available variables'))}\n"
-        f"{vars_list}\n\n"
+        f"{vars_line}\n\n"
         f"{italic(sc('send your new template text below'))}\n"
-        f"{italic(sc('do not include {cover_image} — image is sent automatically'))}"
+        f"{italic(sc('do not include {cover_image}'))}"
     )
 
 
 def template_saved(name: str) -> str:
-    return (
-        f"{bold(sc('template saved'))}\n\n"
-        f"{bullet(name)} {sc('has been updated')}"
-    )
+    return f"{bold(sc('template saved'))}\n\n{bullet(name)} {sc('has been updated')}"
 
 
 def template_view(name: str, content: str) -> str:
@@ -234,14 +235,14 @@ def template_view(name: str, content: str) -> str:
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 def settings_dashboard() -> str:
-    return (
-        f"{bold(sc('settings'))}\n\n"
-        f"{bullets(['appearance options',
-                    'auto posting configuration',
-                    'channel preferences',
-                    'broadcast settings',
-                    'admin tools'])}"
-    )
+    items = [
+        "appearance options",
+        "auto posting configuration",
+        "channel preferences",
+        "broadcast settings",
+        "admin tools",
+    ]
+    return f"{bold(sc('settings'))}\n\n{bullets(items)}"
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
@@ -257,10 +258,13 @@ def analytics_dashboard(post_count: int, user_count: int) -> str:
 # ── Broadcast ─────────────────────────────────────────────────────────────────
 
 def broadcast_prompt() -> str:
+    items = [
+        "send your message below",
+        "supports text, photo, and video",
+    ]
     return (
         f"{bold(sc('broadcast'))}\n\n"
-        f"{bullet(sc('send your message below'))}\n"
-        f"{bullet(sc('supports text, photo, and video'))}\n\n"
+        f"{bullets(items)}\n\n"
         f"{italic(sc('html formatting is supported'))}"
     )
 
@@ -287,7 +291,7 @@ def error(text: str) -> str:
 
 
 def loading(action: str = "loading") -> str:
-    return f"{italic(sc(action))}"
+    return italic(sc(action))
 
 
 def nothing_to_skip() -> str:
